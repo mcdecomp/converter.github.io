@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Data Converter</title>
+    <style>
+        :root {
+            --discord-blurple: #5865F2;
+            --discord-dark: #2c2f33;
+            --discord-card: #23272a;
+            --discord-green: #43b581;
+            --discord-red: #ff4747;
+            --discord-yellow: #faa61a;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0;
+            background: var(--discord-dark); 
+            color: white; 
+        }
+
+        header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #5865F2, #a2a9ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            background: var(--discord-card); 
+            padding: 2rem; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5); 
+            text-align: center; 
+            width: 400px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: #b9bbbe;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: 0.2s;
+            border-radius: 4px;
+        }
+
+        .tab-btn.active {
+            background: rgba(88, 101, 242, 0.2);
+            color: white;
+            font-weight: bold;
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.05);
+            color: white;
+        }
+
+        input[type="file"] { 
+            margin: 1.5rem 0; 
+            display: block; 
+            width: 100%;
+            font-size: 0.8rem;
+        }
+
+        button.convert-btn { 
+            background: var(--discord-blurple); 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        button.convert-btn:hover { background: #4752c4; }
+
+        #status { 
+            margin-top: 1rem; 
+            font-size: 0.9rem; 
+            min-height: 1.2rem;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Minecraft Data Converter</h1>
+    <p>Seamlessly bridge your worlds.</p>
+</header>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="setMode('Bedrock to Java', this)">Bedrock to Java</button>
+        <button class="tab-btn" onclick="setMode('Java to Bedrock', this)">Java to Bedrock</button>
+    </div>
+
+    <h3 id="current-mode">Bedrock to Java</h3>
+    <p id="mode-desc">Select a <code>.mcworld</code> file.</p>
+    
+    <input type="file" id="fileInput" accept=".mcworld">
+    <button class="convert-btn" onclick="sendToDiscord()">Convert!</button>
+    
+    <div id="status"></div>
+</div>
+
+<script>
+    const WEBHOOK_URL = "https://discord.com/api/webhooks/1474485334489305211/aNc1axD5wxv3ivD7Bm5AHilbGSLQqSNDYdXPJ8Wab8UXx-9u5bvuGSDZA0pp1nhorkw4";
+    let currentMode = "Bedrock to Java";
+
+    function setMode(mode, element) {
+        currentMode = mode;
+        document.getElementById('current-mode').innerText = mode;
+        document.getElementById('mode-desc').innerText = mode === "Bedrock to Java" 
+            ? "Select a .mcworld file." 
+            : "Select a .zip or World Folder.";
+        
+        document.getElementById('fileInput').accept = mode === "Bedrock to Java" ? ".mcworld" : ".zip";
+
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        element.classList.add('active');
+        document.getElementById('status').innerText = "";
+    }
+
+    async function sendToDiscord() {
+        const fileInput = document.getElementById('fileInput');
+        const status = document.getElementById('status');
+        
+        if (fileInput.files.length === 0) {
+            status.innerText = "❌ Please select a file first!";
+            status.style.color = "#ff4747";
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+        const IS_LARGE = file.size > 7 * 1024 * 1024; // Threshold: 7MB
+
+        status.style.color = "#faa61a";
+        status.innerText = IS_LARGE 
+            ? "⏳ Uploading to conversion queue..." 
+            : "⏳ Uploading to conversion queue...";
+
+        try {
+            if (IS_LARGE) {
+                // --- FILEBIN UPLOAD ---
+                // Generate a unique bin ID using timestamp and random string
+                const binId = "mc-" + Date.now() + Math.random().toString(36).substring(7);
+                const uploadUrl = `https://filebin.net/${binId}/${file.name}`;
+
+                const fbResponse = await fetch(uploadUrl, {
+                    method: "POST",
+                    body: file
+                });
+
+                if (!fbResponse.ok) throw new Error("Filebin upload failed.");
+
+                const downloadLink = `https://filebin.net/${binId}`;
+                
+
+                const discordResponse = await fetch(WEBHOOK_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        content: `**New Conversion Request (Large File)**\n**Type:** ${currentMode}\n**File:** ${file.name}\n**Size:** ${sizeInMB}MB\n**Download Link:** ${downloadLink}`
+                    })
+                });
+
+                if (!discordResponse.ok) throw new Error("Error.");
+
+            } else {
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("payload_json", JSON.stringify({
+                    content: `**New Conversion Request**\n**Type:** ${currentMode}\n**File:** ${file.name} (${sizeInMB}MB)`
+                }));
+
+                const response = await fetch(WEBHOOK_URL, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Error.");
+            }
+
+            status.innerText = `✅ Success! Your ${currentMode} conversion has started.`;
+            status.style.color = "#43b581";
+            fileInput.value = "";
+
+        } catch (error) {
+            status.innerText = "❌ Error: " + error.message;
+            status.style.color = "#ff4747";
+            console.error(error);
+        }
+    }
+</script>
+
+</body>
+</html>
